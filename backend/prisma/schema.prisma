@@ -14,7 +14,7 @@
 // InventoryTxnType: "RECEIPT" | "RESERVE" | "RELEASE" | "TRANSFER_OUT" | "TRANSFER_IN" | "DAMAGE" | "ADJUSTMENT"
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
