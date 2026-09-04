@@ -20,7 +20,7 @@ router.get("/items", async (req, res) => {
   res.json(await prisma.item.findMany({ orderBy: { id: "asc" } }));
 });
 
-router.post("/items", authorize("ADMIN", "OPERATIONS"), async (req, res) => {
+router.post("/items", authorize("ADMIN"), async (req, res) => {
   const { name, category } = req.body;
   if (!name || !category) return res.status(400).json({ error: "name and category are required" });
   const item = await prisma.item.create({ data: { name, category } });

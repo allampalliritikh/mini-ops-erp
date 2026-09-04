@@ -9,8 +9,11 @@ export default function Inventory() {
   const [locations, setLocations] = useState([]);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ itemId: "", locationId: "", batch: "", physicalQty: "" });
+  const [newItemForm, setNewItemForm] = useState({ name: "", category: "" });
+  const [showNewItem, setShowNewItem] = useState(false);
 
   const canManage = user?.role === "ADMIN" || user?.role === "OPERATIONS";
+  const isAdmin = user?.role === "ADMIN";
 
   async function loadAll() {
     try {
@@ -46,6 +49,24 @@ export default function Inventory() {
     }
   }
 
+  async function handleAddItem(e) {
+    e.preventDefault();
+    setError("");
+    try {
+      const created = await api.post("/items", {
+        name: newItemForm.name,
+        category: newItemForm.category,
+      });
+      setNewItemForm({ name: "", category: "" });
+      setShowNewItem(false);
+      await loadAll();
+      // Pre-select the newly created item in the Receive Stock form.
+      setForm((f) => ({ ...f, itemId: String(created.id) }));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
   async function handleDamage(row) {
     const qty = window.prompt(`Mark how many units of "${row.item.name}" (${row.batch}) as damaged?`);
     if (!qty) return;
@@ -62,6 +83,38 @@ export default function Inventory() {
     <div className="container">
       <h1>Inventory</h1>
       {error && <div className="error-banner">{error}</div>}
+
+      {isAdmin && (
+        <div className="card">
+          <h2>
+            Items{" "}
+            <button type="button" onClick={() => setShowNewItem((s) => !s)}>
+              {showNewItem ? "Cancel" : "+ Add New Item"}
+            </button>
+          </h2>
+          {showNewItem && (
+            <form className="inline-form" onSubmit={handleAddItem}>
+              <label>
+                Name
+                <input
+                  value={newItemForm.name}
+                  onChange={(e) => setNewItemForm({ ...newItemForm, name: e.target.value })}
+                  required
+                />
+              </label>
+              <label>
+                Category
+                <input
+                  value={newItemForm.category}
+                  onChange={(e) => setNewItemForm({ ...newItemForm, category: e.target.value })}
+                  required
+                />
+              </label>
+              <button type="submit">Create Item</button>
+            </form>
+          )}
+        </div>
+      )}
 
       {canManage && (
         <div className="card">
