@@ -1,0 +1,124 @@
+// Mini Operations ERP - Database Schema
+// SQLite by default for zero-config portability. Swap "provider" to "postgresql"
+// and set DATABASE_URL in .env to run on Postgres with no code changes.
+//
+// NOTE: SQLite has no native enum type, so status/role fields below are String
+// columns. The allowed values are validated in the route handlers (see
+// src/routes/*.js) - this keeps the schema portable across SQLite/Postgres/MySQL
+// without changing application code.
+//
+// Role:            "ADMIN" | "OPERATIONS" | "SALES"
+// WorkOrderStatus:  "ASSIGNED" | "IN_PROGRESS" | "COMPLETED"
+// TransferStatus:   "REQUESTED" | "DISPATCHED" | "RECEIVED"
+// OrderStatus:      "RESERVED" | "CANCELLED" | "FULFILLED"
+// InventoryTxnType: "RECEIPT" | "RESERVE" | "RELEASE" | "TRANSFER_OUT" | "TRANSFER_IN" | "DAMAGE" | "ADJUSTMENT"
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  username     String    @unique
+  passwordHash String
+  role         String
+  // Live Verification "Change 4": restrict a user to their assigned location
+  locationId   Int?
+  location     Location? @relation(fields: [locationId], references: [id])
+  createdAt    DateTime  @default(now())
+
+  workOrders WorkOrder[] @relation("AssignedUser")
+  orders     Order[]     @relation("SalesUser")
+}
+
+model Location {
+  id        Int         @id @default(autoincrement())
+  name      String      @unique
+  inventory Inventory[]
+  users     User[]
+}
+
+model Item {
+  id         Int         @id @default(autoincrement())
+  name       String
+  category   String
+  inventory  Inventory[]
+  workOrders WorkOrder[]
+  transfers  Transfer[]
+  orders     Order[]
+}
+
+// One row per (item, location, batch) combination.
+model Inventory {
+  id           Int                    @id @default(autoincrement())
+  itemId       Int
+  locationId   Int
+  batch        String
+  physicalQty  Int                    @default(0)
+  reservedQty  Int                    @default(0)
+  item         Item                   @relation(fields: [itemId], references: [id])
+  location     Location               @relation(fields: [locationId], references: [id])
+  transactions InventoryTransaction[]
+  updatedAt    DateTime               @updatedAt
+  createdAt    DateTime               @default(now())
+
+  @@unique([itemId, locationId, batch])
+}
+
+// Audit trail of every stock movement. (refType, refId, type) is unique so
+// the same source event (e.g. one transfer dispatch) can never double-apply.
+model InventoryTransaction {
+  id          Int       @id @default(autoincrement())
+  inventoryId Int
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  type        String
+  quantity    Int
+  refType     String // "TRANSFER" | "ORDER" | "WORKORDER" | "MANUAL"
+  refId       Int?
+  createdAt   DateTime  @default(now())
+
+  @@unique([inventoryId, refType, refId, type])
+}
+
+model WorkOrder {
+  id             Int      @id @default(autoincrement())
+  locationId     Int
+  itemId         Int
+  item           Item     @relation(fields: [itemId], references: [id])
+  requiredQty    Int
+  assignedUserId Int
+  assignedUser   User     @relation("AssignedUser", fields: [assignedUserId], references: [id])
+  status         String   @default("ASSIGNED")
+  createdAt      DateTime @default(now())
+}
+
+model Transfer {
+  id                     Int       @id @default(autoincrement())
+  sourceLocationId       Int
+  destinationLocationId  Int
+  itemId                 Int
+  item                   Item      @relation(fields: [itemId], references: [id])
+  quantity               Int
+  receivedQty            Int       @default(0) // enables partial receipt
+  status                 String    @default("REQUESTED")
+  createdAt              DateTime  @default(now())
+  dispatchedAt           DateTime?
+  receivedAt             DateTime?
+}
+
+model Order {
+  id          Int      @id @default(autoincrement())
+  itemId      Int
+  item        Item     @relation(fields: [itemId], references: [id])
+  locationId  Int
+  quantity    Int
+  status      String   @default("RESERVED")
+  salesUserId Int
+  salesUser   User     @relation("SalesUser", fields: [salesUserId], references: [id])
+  createdAt   DateTime @default(now())
+}
